@@ -47,7 +47,7 @@ export function DraggableDialogContent({
   containerClassName,
   dragLayerRef,
   showCloseButton = true,
-  closeLabel = "Fermer",
+  closeLabel = "Close",
   children,
   ...props
 }: DraggableDialogContentProps) {
