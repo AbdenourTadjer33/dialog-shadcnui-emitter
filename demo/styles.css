@@ -43,3 +43,11 @@
 body {
     @apply bg-background text-foreground antialiased;
 }
+
+@layer base {
+    *,
+    ::after,
+    ::before {
+        border-color: var(--color-border);
+    }
+}
