@@ -1,4 +1,5 @@
 node_modules/
 public/r/
 dist/
+demo/dist/
 *.log
