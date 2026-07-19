@@ -1,5 +1,15 @@
 import emitter from '@/lib/emitter';
-import { useDraggableDialog } from '@/hooks/use-draggable-dialog';
+import {
+    DraggableDialog,
+    DraggableDialogBody,
+    DraggableDialogContent,
+    DraggableDialogDescription,
+    DraggableDialogFooter,
+    DraggableDialogHeader,
+    DraggableDialogTitle,
+} from '@/components/ui/draggable-dialog';
+import { useDragTransform } from '@/hooks/use-drag-transform';
+import { cn } from '@/lib/utils';
 import type {
     DialogAgreeCallback,
     DialogCustomBody,
@@ -7,15 +17,6 @@ import type {
     DialogModalSize,
     OpenDialogInput,
 } from '@/services/dialogs/dialog.types';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
-import { cn } from '@/lib/utils';
 import React from 'react';
 import { Button } from '../ui/button';
 
@@ -29,7 +30,7 @@ const SIZE_CLASSES: Record<DialogModalSize, string> = {
     '3xl': 'sm:max-w-3xl',
     '4xl': 'sm:max-w-4xl',
     '5xl': 'sm:max-w-5xl',
-    full: 'sm:max-w-[calc(100vw-2rem)] h-[calc(100vh-2rem)]',
+    full: 'sm:max-w-none',
 };
 
 type DialogState = {
@@ -39,49 +40,56 @@ type DialogState = {
     showActions: boolean;
     size: DialogModalSize;
     contentClassName?: string;
+    isDraggable: boolean;
+    allowOverflow: boolean;
     options: { agree: string; disagree: string };
     agree?: DialogAgreeCallback;
     disagree?: DialogDisagreeCallback;
 };
 
-const INITIAL_STATE: DialogState = {
+const DEFAULT_STATE: DialogState = {
     title: 'Êtes-vous sûr ?',
-    message: '',
+    message: 'Veuillez confirmer que vous souhaitez poursuivre cette action. Cette action pourrait être irréversible.',
     showActions: true,
     size: 'lg',
+    isDraggable: true,
+    allowOverflow: false,
     options: { agree: 'Confirmer', disagree: 'Annuler' },
 };
 
 export default function DialogManager() {
     const [isOpen, setIsOpen] = React.useState(false);
-    const [state, setState] = React.useState<DialogState>(INITIAL_STATE);
-    const { contentRef, dragHandleProps, resetPosition, isDragging } = useDraggableDialog();
+    const [state, setState] = React.useState<DialogState>(DEFAULT_STATE);
+
+    const { dragLayerRef, dragHandleRef, resetPosition } = useDragTransform({
+        isDisabled: !isOpen || !state.isDraggable,
+        allowOverflow: state.allowOverflow,
+    });
 
     const close = React.useCallback(() => setIsOpen(false), []);
 
     const open = React.useCallback(
         (input: OpenDialogInput = {}) => {
             setState({
-                title: input.title ?? INITIAL_STATE.title,
-                message:
-                    input.message ??
-                    input.description ??
-                    'Veuillez confirmer que vous souhaitez poursuivre cette action. Cette action pourrait être irréversible.',
+                title: input.title ?? DEFAULT_STATE.title,
+                message: input.message ?? input.description ?? DEFAULT_STATE.message,
                 customBody: input.customBody,
                 showActions: input.showActions ?? true,
                 size: input.modalSize ?? 'lg',
                 contentClassName: input.modalContentClassName,
-                options: input.options ?? INITIAL_STATE.options,
+                isDraggable: input.isDraggable ?? true,
+                allowOverflow: input.allowOverflow ?? false,
+                options: input.options ?? DEFAULT_STATE.options,
                 agree: input.agree,
                 disagree: input.disagree,
             });
-            resetPosition();
+            resetPosition(); // always reopen centred
             setIsOpen(true);
         },
         [resetPosition],
     );
 
-    const handleAgree = () => state.agree?.(close);
+    const handleAgree = () => void state.agree?.(close);
 
     const handleDisagree = () => {
         state.disagree?.();
@@ -93,51 +101,46 @@ export default function DialogManager() {
         emitter.on('open-dialog', open);
         emitter.on('close-dialog', close);
         return () => {
+            // pass the handler so we only remove OUR listener, not every subscriber
             // @ts-expect-error same as above
             emitter.off('open-dialog', open);
             emitter.off('close-dialog', close);
         };
-    }, [open, close]);
+    }, [close, open]);
+
+    const hasCustomBody = state.customBody != null;
 
     return (
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
-            <DialogContent
-                ref={contentRef}
-                className={cn('gap-0 p-0', SIZE_CLASSES[state.size], isDragging && 'select-none')}
-                onInteractOutside={(event) => {
-                    if (isDragging) event.preventDefault();
-                }}
+        <DraggableDialog open={isOpen} onOpenChange={setIsOpen}>
+            <DraggableDialogContent
+                dragLayerRef={dragLayerRef}
+                containerClassName={cn(SIZE_CLASSES[state.size], state.size === 'full' && 'h-[calc(100vh-2rem)]')}
+                closeLabel="Fermer"
             >
-                <DialogHeader
-                    {...dragHandleProps}
-                    className={cn(
-                        'touch-none space-y-0 border-b bg-muted px-6 py-4',
-                        isDragging ? 'cursor-grabbing' : 'cursor-grab',
-                    )}
-                >
-                    <DialogTitle>{state.title}</DialogTitle>
-                    {state.customBody != null && (
-                        <DialogDescription className="sr-only">{state.title}</DialogDescription>
-                    )}
-                </DialogHeader>
+                <DraggableDialogHeader ref={dragHandleRef} isDraggable={state.isDraggable}>
+                    <DraggableDialogTitle>{state.title}</DraggableDialogTitle>
+                    {hasCustomBody && <DraggableDialogDescription className="sr-only">{state.title}</DraggableDialogDescription>}
+                </DraggableDialogHeader>
 
-                {state.customBody != null ? (
-                    <div className={cn('px-6 py-4', state.contentClassName)}>{state.customBody(close)}</div>
-                ) : (
-                    <DialogDescription className={cn('px-6 py-4 text-sm', state.contentClassName)} asChild>
-                        <div>{state.message}</div>
-                    </DialogDescription>
-                )}
+                <DraggableDialogBody className={state.contentClassName}>
+                    {hasCustomBody ? (
+                        state.customBody!(close)
+                    ) : (
+                        <DraggableDialogDescription className="text-sm text-foreground" asChild>
+                            <div>{state.message}</div>
+                        </DraggableDialogDescription>
+                    )}
+                </DraggableDialogBody>
 
                 {state.showActions && (
-                    <DialogFooter className="border-t bg-muted/30 px-6 py-4">
+                    <DraggableDialogFooter>
                         <Button variant="outline" onClick={handleDisagree}>
                             {state.options.disagree}
                         </Button>
                         <Button onClick={handleAgree}>{state.options.agree}</Button>
-                    </DialogFooter>
+                    </DraggableDialogFooter>
                 )}
-            </DialogContent>
-        </Dialog>
+            </DraggableDialogContent>
+        </DraggableDialog>
     );
 }
