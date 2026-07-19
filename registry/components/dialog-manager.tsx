@@ -1,4 +1,7 @@
-import emitter from '@/lib/emitter';
+'use client';
+
+import * as React from 'react';
+
 import {
     DraggableDialog,
     DraggableDialogBody,
@@ -7,18 +10,18 @@ import {
     DraggableDialogFooter,
     DraggableDialogHeader,
     DraggableDialogTitle,
-} from '@/components/ui/draggable-dialog';
+} from '@/components/draggable-dialog';
+import { Button } from '@/components/ui/button';
 import { useDragTransform } from '@/hooks/use-drag-transform';
+import {
+    dialogEmitter,
+    type DialogAgreeCallback,
+    type DialogCustomBody,
+    type DialogDisagreeCallback,
+    type DialogModalSize,
+    type OpenDialogInput,
+} from '@/lib/dialogs';
 import { cn } from '@/lib/utils';
-import type {
-    DialogAgreeCallback,
-    DialogCustomBody,
-    DialogDisagreeCallback,
-    DialogModalSize,
-    OpenDialogInput,
-} from '@/services/dialogs/dialog.types';
-import React from 'react';
-import { Button } from '../ui/button';
 
 const SIZE_CLASSES: Record<DialogModalSize, string> = {
     xs: 'sm:max-w-xs',
@@ -31,6 +34,22 @@ const SIZE_CLASSES: Record<DialogModalSize, string> = {
     '4xl': 'sm:max-w-4xl',
     '5xl': 'sm:max-w-5xl',
     full: 'sm:max-w-none',
+};
+
+export type DialogManagerLabels = {
+    title?: string;
+    message?: string;
+    agree?: string;
+    disagree?: string;
+    close?: string;
+};
+
+const DEFAULT_LABELS: Required<DialogManagerLabels> = {
+    title: 'Are you sure?',
+    message: 'Please confirm that you want to proceed. This action may be irreversible.',
+    agree: 'Confirm',
+    disagree: 'Cancel',
+    close: 'Close',
 };
 
 type DialogState = {
@@ -47,39 +66,36 @@ type DialogState = {
     disagree?: DialogDisagreeCallback;
 };
 
-const DEFAULT_STATE: DialogState = {
-    title: 'Êtes-vous sûr ?',
-    message: 'Veuillez confirmer que vous souhaitez poursuivre cette action. Cette action pourrait être irréversible.',
-    showActions: true,
-    size: 'lg',
-    isDraggable: true,
-    allowOverflow: false,
-    options: { agree: 'Confirmer', disagree: 'Annuler' },
-};
+/** Mount once at the app root; drive it with openDialog()/closeDialog(). */
+export default function DialogManager({ labels }: { labels?: DialogManagerLabels }) {
+    const mergedLabels = { ...DEFAULT_LABELS, ...labels };
+    // read through a ref so the emitter handlers stay referentially stable
+    const labelsRef = React.useRef(mergedLabels);
+    labelsRef.current = mergedLabels;
 
-export default function DialogManager() {
     const [isOpen, setIsOpen] = React.useState(false);
-    const [state, setState] = React.useState<DialogState>(DEFAULT_STATE);
+    const [state, setState] = React.useState<DialogState | null>(null);
 
     const { dragLayerRef, dragHandleRef, resetPosition } = useDragTransform({
-        isDisabled: !isOpen || !state.isDraggable,
-        allowOverflow: state.allowOverflow,
+        isDisabled: !isOpen || !(state?.isDraggable ?? true),
+        allowOverflow: state?.allowOverflow ?? false,
     });
 
     const close = React.useCallback(() => setIsOpen(false), []);
 
     const open = React.useCallback(
         (input: OpenDialogInput = {}) => {
+            const l = labelsRef.current;
             setState({
-                title: input.title ?? DEFAULT_STATE.title,
-                message: input.message ?? input.description ?? DEFAULT_STATE.message,
+                title: input.title ?? l.title,
+                message: input.message ?? input.description ?? l.message,
                 customBody: input.customBody,
                 showActions: input.showActions ?? true,
                 size: input.modalSize ?? 'lg',
                 contentClassName: input.modalContentClassName,
                 isDraggable: input.isDraggable ?? true,
                 allowOverflow: input.allowOverflow ?? false,
-                options: input.options ?? DEFAULT_STATE.options,
+                options: input.options ?? { agree: l.agree, disagree: l.disagree },
                 agree: input.agree,
                 disagree: input.disagree,
             });
@@ -89,24 +105,24 @@ export default function DialogManager() {
         [resetPosition],
     );
 
+    React.useEffect(() => {
+        dialogEmitter.on('open-dialog', open);
+        dialogEmitter.on('close-dialog', close);
+        return () => {
+            // pass the handler so we only remove OUR listener, not every subscriber
+            dialogEmitter.off('open-dialog', open);
+            dialogEmitter.off('close-dialog', close);
+        };
+    }, [close, open]);
+
+    if (!state) return null;
+
     const handleAgree = () => void state.agree?.(close);
 
     const handleDisagree = () => {
         state.disagree?.();
         close();
     };
-
-    React.useEffect(() => {
-        // @ts-expect-error emitter payload is dynamic and shared across legacy dialog callsites
-        emitter.on('open-dialog', open);
-        emitter.on('close-dialog', close);
-        return () => {
-            // pass the handler so we only remove OUR listener, not every subscriber
-            // @ts-expect-error same as above
-            emitter.off('open-dialog', open);
-            emitter.off('close-dialog', close);
-        };
-    }, [close, open]);
 
     const hasCustomBody = state.customBody != null;
 
@@ -115,7 +131,7 @@ export default function DialogManager() {
             <DraggableDialogContent
                 dragLayerRef={dragLayerRef}
                 containerClassName={cn(SIZE_CLASSES[state.size], state.size === 'full' && 'h-[calc(100vh-2rem)]')}
-                closeLabel="Fermer"
+                closeLabel={mergedLabels.close}
             >
                 <DraggableDialogHeader ref={dragHandleRef} isDraggable={state.isDraggable}>
                     <DraggableDialogTitle>{state.title}</DraggableDialogTitle>
