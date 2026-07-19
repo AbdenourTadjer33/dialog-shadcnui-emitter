@@ -1,0 +1,39 @@
+{
+    "$schema": "https://ui.shadcn.com/schema/registry.json",
+    "name": "dialog-shadcnui-emitter",
+    "homepage": "https://abdenourtadjer33.github.io/dialog-shadcnui-emitter",
+    "items": [
+        {
+            "name": "use-drag-transform",
+            "type": "registry:hook",
+            "title": "useDragTransform",
+            "description": "Transform-only drag hook: composited translate3d layer, pointer capture, viewport bounds clamping, keyboard arrow-key movement.",
+            "files": [{ "path": "registry/hooks/use-drag-transform.ts", "type": "registry:hook" }]
+        },
+        {
+            "name": "draggable-dialog",
+            "type": "registry:component",
+            "title": "Draggable Dialog",
+            "description": "shadcn-style composable dialog on Radix with a dedicated transform-only drag layer, scrollable body, and sticky header/footer.",
+            "dependencies": ["@radix-ui/react-dialog", "lucide-react"],
+            "registryDependencies": ["utils"],
+            "files": [{ "path": "registry/components/draggable-dialog.tsx", "type": "registry:component" }]
+        },
+        {
+            "name": "dialog-manager",
+            "type": "registry:component",
+            "title": "Dialog Manager",
+            "description": "App-wide imperative dialog driven by a typed mitt emitter: mount once, then openDialog()/closeDialog() from anywhere.",
+            "dependencies": ["mitt"],
+            "registryDependencies": [
+                "button",
+                "https://abdenourtadjer33.github.io/dialog-shadcnui-emitter/r/use-drag-transform.json",
+                "https://abdenourtadjer33.github.io/dialog-shadcnui-emitter/r/draggable-dialog.json"
+            ],
+            "files": [
+                { "path": "registry/components/dialog-manager.tsx", "type": "registry:component" },
+                { "path": "registry/lib/dialogs.ts", "type": "registry:lib" }
+            ]
+        }
+    ]
+}
